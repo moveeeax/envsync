@@ -1,0 +1,6 @@
+/bin/
+/envsync
+*.out
+*.test
+.env
+!examples/.env
