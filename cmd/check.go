@@ -18,6 +18,7 @@ func newCheckCmd() *cobra.Command {
 		asJSON      bool
 		strict      bool
 		fix         bool
+		showValues  bool
 	)
 
 	cmd := &cobra.Command{
@@ -46,7 +47,7 @@ func newCheckCmd() *cobra.Command {
 				}
 			}
 
-			res := validate.Validate(example, env, validate.Options{Strict: strict})
+			res := validate.Validate(example, env, validate.Options{Strict: strict, ShowValues: showValues})
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -68,6 +69,7 @@ func newCheckCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit machine-readable JSON")
 	cmd.Flags().BoolVar(&strict, "strict", false, "treat extra variables as failures")
 	cmd.Flags().BoolVar(&fix, "fix", false, "scaffold missing keys into the .env before validating")
+	cmd.Flags().BoolVar(&showValues, "show-values", false, "include the offending value in mismatch messages (may print secrets)")
 	return cmd
 }
 

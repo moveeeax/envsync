@@ -96,6 +96,50 @@ func TestInlineHashInsideQuotesIsLiteral(t *testing.T) {
 	}
 }
 
+// "@enum=a, b, c" is as natural to write as "@enum=a,b,c"; dropping every
+// member after the first silently turns a valid .env into a mismatch.
+func TestEnumAnnotationToleratesSpacesAfterCommas(t *testing.T) {
+	cases := map[string]string{
+		"spaced":            "# @enum=dev, staging, prod\nAPP_ENV=dev\n",
+		"tight":             "# @enum=dev,staging,prod\nAPP_ENV=dev\n",
+		"spaced_then_flag":  "# @enum=dev, staging, prod @required\nAPP_ENV=dev\n",
+		"parenthesised":     "# @type=enum(dev, staging, prod)\nAPP_ENV=dev\n",
+		"trailing_prose":    "# @enum=dev,staging,prod pick one\nAPP_ENV=dev\n",
+		"tight_then_flag":   "# @enum=dev,staging,prod @required\nAPP_ENV=dev\n",
+		"inline_annotation": "APP_ENV=dev # @enum=dev, staging, prod\n",
+	}
+	want := []string{"dev", "staging", "prod"}
+	for name, in := range cases {
+		t.Run(name, func(t *testing.T) {
+			f, err := Parse(strings.NewReader(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, ok := f.Get("APP_ENV")
+			if !ok {
+				t.Fatal("missing APP_ENV")
+			}
+			if got.Spec.Type != "enum" {
+				t.Errorf("type = %q, want enum", got.Spec.Type)
+			}
+			if !reflect.DeepEqual(got.Spec.Enum, want) {
+				t.Errorf("enum = %v, want %v", got.Spec.Enum, want)
+			}
+		})
+	}
+}
+
+func TestEnumAnnotationSetsRequired(t *testing.T) {
+	f, err := Parse(strings.NewReader("# @enum=dev, prod @required\nAPP_ENV=dev\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.Get("APP_ENV")
+	if !got.Spec.Required {
+		t.Errorf("@required after a spaced @enum list was swallowed: %+v", got.Spec)
+	}
+}
+
 func TestUntypedDefaultsToString(t *testing.T) {
 	f, _ := Parse(strings.NewReader("NAME=bob"))
 	got, _ := f.Get("NAME")

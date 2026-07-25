@@ -95,13 +95,82 @@ func TestOptionalEmptyOK(t *testing.T) {
 	}
 }
 
+// A required variable that is present but empty is the same failure as one
+// that is absent, and must be reported under the same kind so that consumers
+// filtering on kind=="missing" actually see it.
+func TestRequiredEmptyIsMissingNotMismatch(t *testing.T) {
+	env := parse(t, "PORT=\nENV=dev\n")
+	res := Validate(parse(t, example), env, Options{})
+	if res.OK {
+		t.Fatal("expected failure")
+	}
+	if !has(res.Issues, "PORT", Missing) {
+		t.Errorf("empty required PORT should be reported as missing: %+v", res.Issues)
+	}
+	if has(res.Issues, "PORT", Mismatch) {
+		t.Errorf("empty required PORT should not be reported as mismatch: %+v", res.Issues)
+	}
+}
+
 func TestBoolVariants(t *testing.T) {
 	for _, v := range []string{"true", "false", "1", "0", "yes", "no", "on", "off"} {
-		if msg, ok := checkType(v, dotenv.Spec{Type: "bool"}); !ok {
+		if msg, ok := checkType(v, dotenv.Spec{Type: "bool"}, false); !ok {
 			t.Errorf("%q should be valid bool: %s", v, msg)
 		}
 	}
-	if _, ok := checkType("nope", dotenv.Spec{Type: "bool"}); ok {
+	if _, ok := checkType("nope", dotenv.Spec{Type: "bool"}, false); ok {
 		t.Error("nope should be invalid bool")
+	}
+}
+
+// Mismatch messages are printed to stdout and end up in CI logs, so they must
+// not echo the value: a mistyped variable is very often a credential.
+func TestMismatchMessagesDoNotLeakValues(t *testing.T) {
+	const secret = "not-a-real-token-abcdefghi"
+	specs := []dotenv.Spec{
+		{Type: "int"},
+		{Type: "bool"},
+		{Type: "url"},
+		{Type: "enum", Enum: []string{"dev", "prod"}},
+	}
+	for _, spec := range specs {
+		msg, ok := checkType(secret, spec, false)
+		if ok {
+			t.Fatalf("%s should reject %q", spec.Type, secret)
+		}
+		if strings.Contains(msg, secret) {
+			t.Errorf("%s message leaks the value: %q", spec.Type, msg)
+		}
+		if !strings.Contains(msg, "26-character") {
+			t.Errorf("%s message should describe the value length, got %q", spec.Type, msg)
+		}
+	}
+}
+
+func TestValidateDoesNotLeakValuesEndToEnd(t *testing.T) {
+	const secret = "not-a-real-token-abcdefghi"
+	env := parse(t, "PORT="+secret+"\nENV="+secret+"\n")
+	res := Validate(parse(t, example), env, Options{})
+	if res.OK {
+		t.Fatal("expected failure")
+	}
+	for _, is := range res.Issues {
+		if strings.Contains(is.Message, secret) {
+			t.Errorf("issue %+v leaks the value", is)
+		}
+	}
+}
+
+func TestShowValuesOptsIntoEchoingTheValue(t *testing.T) {
+	env := parse(t, "PORT=notanint\nENV=dev\n")
+	res := Validate(parse(t, example), env, Options{ShowValues: true})
+	found := false
+	for _, is := range res.Issues {
+		if is.Key == "PORT" && strings.Contains(is.Message, `"notanint"`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("--show-values should echo the value: %+v", res.Issues)
 	}
 }
