@@ -91,6 +91,59 @@ func TestCheckJSON(t *testing.T) {
 	}
 }
 
+// The whole point of the tool is to be run in CI, where stdout is archived.
+// A mistyped variable is usually a secret, so neither output mode may echo it.
+func TestCheckDoesNotPrintValues(t *testing.T) {
+	const secret = "not-a-real-token-abcdefghi"
+	dir := t.TempDir()
+	ex := filepath.Join(dir, ".env.example")
+	env := filepath.Join(dir, ".env")
+	write(t, ex, exampleFile)
+	write(t, env, "PORT="+secret+"\nENV="+secret+"\n")
+
+	for _, args := range [][]string{
+		{"check", "-e", ex, "-f", env},
+		{"check", "-e", ex, "-f", env, "--json"},
+	} {
+		out, err := run(t, args...)
+		if !errors.Is(err, ErrValidationFailed()) {
+			t.Fatalf("%v: expected failure, got %v", args, err)
+		}
+		if strings.Contains(out, secret) {
+			t.Errorf("%v leaked the value:\n%s", args, out)
+		}
+	}
+
+	out, err := run(t, "check", "-e", ex, "-f", env, "--show-values")
+	if !errors.Is(err, ErrValidationFailed()) {
+		t.Fatalf("expected failure, got %v", err)
+	}
+	if !strings.Contains(out, secret) {
+		t.Errorf("--show-values should echo the value:\n%s", out)
+	}
+}
+
+func TestCheckFixWritesOwnerOnlyFile(t *testing.T) {
+	dir := t.TempDir()
+	ex := filepath.Join(dir, ".env.example")
+	env := filepath.Join(dir, ".env")
+	write(t, ex, exampleFile)
+	if err := os.WriteFile(env, []byte("PORT=3000\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := run(t, "check", "-e", ex, "-f", env, "--fix"); err != nil {
+		t.Fatalf("fix+check should pass: %v", err)
+	}
+	info, err := os.Stat(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf(".env mode = %04o, want 0600", got)
+	}
+}
+
 func TestCheckFix(t *testing.T) {
 	dir := t.TempDir()
 	ex := filepath.Join(dir, ".env.example")

@@ -55,7 +55,10 @@ func (f *File) Keys() []string {
 var (
 	assignRe = regexp.MustCompile(`^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$`)
 	typeRe   = regexp.MustCompile(`@type=([A-Za-z]+)(?:\(([^)]*)\))?`)
-	enumRe   = regexp.MustCompile(`@enum=([^\s]+)`)
+	// Members may be separated by ", " as well as ",". Without the optional
+	// whitespace, "@enum=dev, staging, prod" captured only "dev," and every
+	// other value was silently rejected as out of range.
+	enumRe = regexp.MustCompile(`@enum=([^\s,]+(?:\s*,\s*[^\s,]+)*)`)
 )
 
 // ParseFile reads and parses the file at path.
@@ -75,7 +78,6 @@ func Parse(r io.Reader) (*File, error) {
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var pending Spec // annotations accumulated from standalone comment lines
-	var havePending bool
 	lineNo := 0
 
 	for sc.Scan() {
@@ -84,19 +86,19 @@ func Parse(r io.Reader) (*File, error) {
 		trimmed := strings.TrimSpace(raw)
 
 		if trimmed == "" {
-			pending, havePending = Spec{}, false
+			pending = Spec{}
 			continue
 		}
 		if strings.HasPrefix(trimmed, "#") {
 			if spec, ok := parseAnnotations(trimmed); ok {
-				pending, havePending = merge(pending, spec), true
+				pending = merge(pending, spec)
 			}
 			continue
 		}
 
 		m := assignRe.FindStringSubmatch(raw)
 		if m == nil {
-			pending, havePending = Spec{}, false
+			pending = Spec{}
 			continue
 		}
 		key := m[1]
@@ -108,7 +110,6 @@ func Parse(r io.Reader) (*File, error) {
 				spec = merge(spec, s)
 			}
 		}
-		havePending = false
 		pending = Spec{}
 
 		v := Var{Key: key, Value: unquote(value), Line: lineNo, Spec: normalize(spec)}
@@ -122,7 +123,6 @@ func Parse(r io.Reader) (*File, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-	_ = havePending
 	return out, nil
 }
 

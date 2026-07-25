@@ -4,3 +4,6 @@
 *.test
 .env
 !examples/.env
+
+# staging files left behind if an `envsync check --fix` is killed mid-write
+.envsync-*.tmp
