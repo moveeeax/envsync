@@ -127,7 +127,11 @@ func Parse(r io.Reader) (*File, error) {
 }
 
 // splitInline separates a value from a trailing " # ..." comment. A '#' inside
-// quotes is treated as literal.
+// quotes is treated as literal, and so — matching shell word-splitting rules —
+// is a '#' that is not preceded by whitespace: "FOO=#bar" is the value
+// "#bar", not an empty value with a dropped comment, since nothing separates
+// the '#' from the start of the assignment. Only "FOO=bar #comment", with
+// whitespace before the '#', is a comment.
 func splitInline(s string) (value, comment string) {
 	inSingle, inDouble := false, false
 	for i, r := range s {
@@ -141,7 +145,7 @@ func splitInline(s string) (value, comment string) {
 				inDouble = !inDouble
 			}
 		case '#':
-			if !inSingle && !inDouble && (i == 0 || s[i-1] == ' ' || s[i-1] == '\t') {
+			if !inSingle && !inDouble && i > 0 && (s[i-1] == ' ' || s[i-1] == '\t') {
 				return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i:])
 			}
 		}
