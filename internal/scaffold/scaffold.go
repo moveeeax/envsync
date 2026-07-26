@@ -30,10 +30,40 @@ func Render(example *dotenv.File, existing *dotenv.File) (string, []string) {
 		if _, ok := existing.Get(v.Key); ok {
 			continue
 		}
-		fmt.Fprintf(&b, "%s=%s\n", v.Key, v.Value)
+		fmt.Fprintf(&b, "%s=%s\n", v.Key, quoteIfNeeded(v.Value))
 		added = append(added, v.Key)
 	}
 	return b.String(), added
+}
+
+// quoteIfNeeded wraps v in quotes when writing it out unquoted would not
+// round-trip back through dotenv.Parse to the same value: leading/trailing
+// whitespace is trimmed by the parser unless quoted, and a " #" (or "\t#")
+// in the middle of an unquoted value is parsed as the start of a trailing
+// comment, truncating everything after it. Both are real shapes for a
+// .env.example default, e.g. `TITLE="My App #1"`. Values that need quoting
+// but contain a '"' fall back to single quotes; if they contain both quote
+// characters this minimal writer has no escape syntax and best-effort wraps
+// in double quotes anyway, since leaving it unquoted is guaranteed to corrupt
+// it.
+func quoteIfNeeded(v string) string {
+	if !needsQuoting(v) {
+		return v
+	}
+	if !strings.Contains(v, `"`) {
+		return `"` + v + `"`
+	}
+	if !strings.Contains(v, "'") {
+		return "'" + v + "'"
+	}
+	return `"` + v + `"`
+}
+
+func needsQuoting(v string) bool {
+	if strings.TrimSpace(v) != v {
+		return true
+	}
+	return strings.Contains(v, " #") || strings.Contains(v, "\t#")
 }
 
 // Apply writes missing keys from example into the .env at path, creating it if

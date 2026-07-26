@@ -170,6 +170,86 @@ func TestApplyFailureLeavesOriginalIntact(t *testing.T) {
 	}
 }
 
+// A default value that was quoted in the example specifically to protect an
+// embedded " #" must come out quoted again when scaffolded, or the unquoted
+// "#..." tail parses back as a dropped trailing comment on the next check.
+func TestApplyQuotesValueThatWouldOtherwiseLoseATrailingHashSegment(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	ex := parse(t, `TITLE="My App #1"`+"\n")
+
+	if _, err := Apply(ex, path); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reparsed, err := dotenv.Parse(strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := reparsed.Get("TITLE")
+	if !ok {
+		t.Fatal("TITLE missing from scaffolded file")
+	}
+	if got.Value != "My App #1" {
+		t.Errorf("round-tripped TITLE = %q, want %q (scaffolded body: %q)", got.Value, "My App #1", body)
+	}
+}
+
+// Leading/trailing whitespace in a default is only preserved by the parser
+// when quoted; scaffold must re-quote it rather than emit it bare, or the
+// parser's TrimSpace silently strips it back out on the next check.
+func TestApplyQuotesValueWithLeadingOrTrailingWhitespace(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	ex := parse(t, `PADDED="  spaced  "`+"\n")
+
+	if _, err := Apply(ex, path); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reparsed, err := dotenv.Parse(strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := reparsed.Get("PADDED")
+	if !ok {
+		t.Fatal("PADDED missing from scaffolded file")
+	}
+	if got.Value != "  spaced  " {
+		t.Errorf("round-tripped PADDED = %q, want %q (scaffolded body: %q)", got.Value, "  spaced  ", body)
+	}
+}
+
+// Ordinary values (the overwhelming common case) must stay unquoted, both
+// for readable output and so existing scaffolded files don't change shape.
+func TestApplyDoesNotQuoteOrdinaryValues(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	ex := parse(t, "PORT=8080\nTHEME_COLOR=#336699\n")
+
+	if _, err := Apply(ex, path); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "PORT=8080\n") {
+		t.Errorf("PORT should be unquoted: %q", body)
+	}
+	if !strings.Contains(string(body), "THEME_COLOR=#336699\n") {
+		t.Errorf("THEME_COLOR should be unquoted (a leading '#' with no preceding whitespace is not a comment): %q", body)
+	}
+}
+
 func TestApplyIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".env")

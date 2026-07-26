@@ -140,6 +140,50 @@ func TestEnumAnnotationSetsRequired(t *testing.T) {
 	}
 }
 
+// A '#' immediately after '=' has no preceding whitespace, so per shell
+// word-splitting rules it is part of the value, not a comment marker.
+// "COLOR=#336699" (a hex color, or a git-SHA-like token) must parse to the
+// value "#336699", not silently become empty with the whole thing swallowed
+// as a dropped comment.
+func TestHashAtStartOfValueIsLiteralNotComment(t *testing.T) {
+	cases := map[string]struct{ in, want string }{
+		"hex_color":      {"THEME_COLOR=#336699", "#336699"},
+		"just_hash":      {"KEY=#", "#"},
+		"hash_then_text": {"KEY=#deadbeef and more", "#deadbeef and more"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f, err := Parse(strings.NewReader(c.in + "\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, ok := f.Get("KEY")
+			if name == "hex_color" {
+				got, ok = f.Get("THEME_COLOR")
+			}
+			if !ok {
+				t.Fatal("key not found")
+			}
+			if got.Value != c.want {
+				t.Errorf("value = %q, want %q", got.Value, c.want)
+			}
+		})
+	}
+}
+
+// A '#' preceded by whitespace is still a comment, whether or not the value
+// before it happens to start with '#' too.
+func TestSpaceThenHashIsStillAComment(t *testing.T) {
+	f, err := Parse(strings.NewReader("KEY=value #not part of the value\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.Get("KEY")
+	if got.Value != "value" {
+		t.Errorf("value = %q, want %q", got.Value, "value")
+	}
+}
+
 func TestUntypedDefaultsToString(t *testing.T) {
 	f, _ := Parse(strings.NewReader("NAME=bob"))
 	got, _ := f.Get("NAME")
