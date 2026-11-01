@@ -1,7 +1,7 @@
 # envsync
 
 [![ci](https://github.com/moveeeax/envsync/actions/workflows/ci.yml/badge.svg)](https://github.com/moveeeax/envsync/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8?logo=go)](https://go.dev)
+[![Go](https://img.shields.io/badge/go-1.26%2B-00ADD8?logo=go)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Stop shipping broken configs. `envsync` validates a project's `.env` against a
