@@ -148,3 +148,7 @@ previously left group- or world-readable.
 ## License
 
 [MIT](LICENSE)
+
+---
+
+**Archived on 2026-11-05.** merge into envtool: both are small Go/cobra `.env` CLIs by the same owner. envsync's typed `.env.example` contract is the stronger idea, but as a separate binary it competes with `envtool validate`. Fold it in as `envtool check` and archive envsync after a deprecation release. The scope moves to [envtool](https://github.com/moveeeax/envtool/issues/5).
